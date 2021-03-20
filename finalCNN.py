@@ -3,6 +3,7 @@ import sys
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import random
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from sklearn.model_selection import StratifiedKFold
@@ -96,17 +97,12 @@ class finalNetwork:
 #######################################################################################################################################
 
 
-'allendriver/allendriver', 'battery/battery', 'brush/brush', 'fork/fork', 'key/key', 'knife/knife', 'lighter/lighter', 'mechanical_pencil/mechanical_pencil', 'pen/pen', 'pendrive/pendrive', r'azor/razor', 'screw/screw', 'screwdriver/screwdriver', 'spoon/spoon', 'toothbrush/toothbrush', 'wrench/wrench'
-['ball/ball'], ['bottle/bottle'], ['box/box'], ['calculator/calculator'], ['camera/camera'], ['can/can'], ['case/case'], ['container/container'], ['cup/cup'], ['hd/hd'], ['lamp/lamp'], ['orange/orange'], ['pear/pear'], ['phone/phone'], ['wallet/wallet']
-
-
 n_classes = 2
 image_shape = (128, 128, 1)
-img, labels = utilsDVS128.createDataset(path='/home/user/GitHub/aedatFiles/new_dataset/',
+img, lab = utilsDVS128.createDataset(path='/home/user/GitHub/aedatFiles/new_dataset/',
 										objClass=[['allendriver/allendriver'],
 											  	  ['battery/battery'],
 										   		  ['brush/brush'],
-												  ['fork/fork'],
 												  ['key/key'],
 												  ['knife/knife'],
 												  ['lighter/lighter'],
@@ -130,52 +126,105 @@ img, labels = utilsDVS128.createDataset(path='/home/user/GitHub/aedatFiles/new_d
 												  ['cup/cup'],
 												  ['hd/hd'],
 												  ['lamp/lamp'],
+												  ['mug/mug'],
 												  ['orange/orange'],
-												  ['pear/pear'],
-												  ['phone/phone'], 
+												  ['phone/phone'],
 												  ['wallet/wallet']],
 										setUp=False,
 										tI=40000)
 
-imgROI_train, imgROI_test = [], []
+
+for i in range(len(img)):
+    img[i][img[i] == 0] = 255
+    img[i][img[i] == 127] = 0
+
+
+imgROI = []
 rem = []
-for i, m in enumerate(img[0]):
+for i, m in enumerate(img):
 	watershedImage, mask, detection, opening, sure_fg, sure_bg, markers = segmentationUtils.watershed(m,'--neuromorphic',minimumSizeBox=0.5,smallBBFilter=True,centroidDistanceFilter = True, mergeOverlapingDetectionsFilter = True,flagCloserToCenter=True)
-	if len(detection) > 0 and (detection[0][2] > 50 or detection[0][3] > 50):
-		_, interp_img_train = segmentationUtils.getROI(detection, img[0][i])
-		imgROI_train.append(interp_img_train)
+	if len(detection) > 0:
+		if lab[i] < 15:
+			if detection[0][2]*detection[0][3] > 200:
+				_, interp_img_train = segmentationUtils.getROI(detection, img[i])
+				imgROI.append(interp_img_train)
+			else:
+				rem.append(i)
+		else:
+			if detection[0][2]*detection[0][3] > 800:
+				_, interp_img_train = segmentationUtils.getROI(detection, img[i])
+				imgROI.append(interp_img_train)
+			else:
+				rem.append(i)
 	else:
 		rem.append(i)
 
+labels = np.delete(lab, rem)
 
-lab1 = np.delete(labels[0], rem)
 
-rem = []
-for i, m in enumerate(img[1]):
-	watershedImage, mask, detection, opening, sure_fg, sure_bg, markers = segmentationUtils.watershed(m,'--neuromorphic',minimumSizeBox=0.5,smallBBFilter=True,centroidDistanceFilter = True, mergeOverlapingDetectionsFilter = True,flagCloserToCenter=True)
-	if len(detection) > 0 and (detection[0][2] > 50 or detection[0][3] > 50):
-		_, interp_img_test = segmentationUtils.getROI(detection, img[1][i])
-		imgROI_test.append(interp_img_test)
-	else:
-		rem.append(i)
+for i in range(30):
+	print(i, ": ", len(labels[labels == i]))
 
-lab2 = np.delete(labels[1], rem)
-img = [[], []]
-img[0], img[1] = np.array(imgROI_train), np.array(imgROI_test)N
+
+images = np.array(imgROI)
+
+
+size = 300
+final_images = []
+for i in range(30):
+	aux_images = images[labels == i]
+	delta = len(aux_images) - size
+	to_remove = random.sample(range(len(aux_images)), delta)
+	del_images = np.delete(aux_images, to_remove, 0)
+	final_images.append(del_images)
+
+
+final_images = np.array(final_images)
+
+images = []
+
+
+for i in range(len(total_images)):
+	total_images[i][total_images[i] < 200] = 0
+
+
+a = 0
+for i, v in enumerate(total_images):
+	a += 50
+	print(lab[i + a])
+	plt.imshow(total_images[i + a], cmap="gray")
+	plt.show()
+
 
 
 ##########################################################################################
 ##########################################################################################
 ##########################################################################################
 
+images_Tripod = np.concatenate((final_images[0 : 10]))
+images_Power = np.concatenate((final_images[15 : 25]))
+total_images = np.concatenate((images_Tripod, images_Power))
+total_labels = np.concatenate((np.zeros(len(images_Tripod)), np.ones(len(images_Power))))
 
-train_img, test_img, train_labels, test_labels = img[0], img[1], lab1, lab2
-train_img = train_img.reshape(train_img.shape[0], image_shape[0], image_shape[1], 1)
-train_img = (train_img / 255).astype('float32')
-test_img = test_img.reshape(test_img.shape[0], image_shape[0], image_shape[1], 1)
-test_img = (test_img / 255).astype('float32')
+images_Tripod, images_Tripod = [], []
 
-(train_img, test_img, train_labels, test_labels) = train_test_split(train_img, train_labels, test_size=0.1)
+extra_images_Tripod = np.concatenate((final_images[10 : 15]))
+extra_images_Power = np.concatenate((final_images[25 : 30]))
+extra_images = np.concatenate((extra_images_Tripod, extra_images_Power))
+extra_labels = np.concatenate((np.zeros(len(extra_images_Tripod)), np.ones(len(extra_images_Power))))
+
+extra_images_Tripod, extra_images_Power = [], []
+final_images = []
+
+total_images = total_images.reshape(total_images.shape[0], image_shape[0], image_shape[1], 1)
+total_images = (total_images / 255).astype('float32')
+extra_images = extra_images.reshape(extra_images.shape[0], image_shape[0], image_shape[1], 1)
+extra_images = (extra_images / 255).astype('float32')
+
+
+(train_img, test_img, train_labels, test_labels) = train_test_split(total_images, total_labels, test_size=0.2, shuffle=True)
+
+total_images, total_labels = [], []
 
 aux_test_labels = train_labels
 aux_train_labels = test_labels
@@ -194,7 +243,7 @@ aug = ImageDataGenerator(rotation_range=30, width_shift_range=0.1, height_shift_
 # initialize the number of epochs to train for, initia learning rate, and batch size
 EPOCHS = 20
 INIT_LR = 1e-3
-BATCH_SIZE = 500
+BATCH_SIZE = 150
 
 # initialize the model
 print("[INFO] compiling model...")
@@ -219,38 +268,22 @@ plt.legend(loc="lower left")
 plt.show()
 
 
+aux = to_categorical(extra_labels, num_classes=2)
+model.evaluate(extra_images, aux)
 
-model.evaluate(testX, testY)
 
-test_preds = model.predict(testX)
+
+test_preds = model.predict(extra_images)
 test_preds_labels = prep_submissions(test_preds)
-
-print(classification_report(aux_test_labels, test_preds_labels))
-
-draw_confusion_matrix(aux_test_labels, test_preds_labels)
-
-
-test_img, test_labels
-aux = to_categorical(test_labels, num_classes=2)
-
-model.evaluate(test_img, aux)
-
-
-test_preds = model.predict(test_img)
-
-test_preds_labels = prep_submissions(test_preds)
-
 print(classification_report(test_labels, test_preds_labels))
-
 draw_confusion_matrix(test_labels, test_preds_labels)
 
 
+saveModelAndWeights(model, name="model")
 
 
-                  objClass=[['spoon/spoon_1', 'spoon/spoon_2', 'spoon/spoon_3', 'spoon/spoon_4', 'spoon/spoon_5'], ['pencil/pencil_1', 'pencil/pencil_2', 'pencil/pencil_3', 'pencil/pencil_4', 'pencil/pencil_5'], ['apple/apple_1', 'apple/apple_2', 'apple/apple_3', 'apple/apple_4', 'apple/apple_5']],
-                  setUp=True,
-allendriver/allendriver, battery/battery, brush/brush, fork/fork, key/key, knife/knife, lighter/lighter, mechanical_pencil/mechanical_pencil, pen/pen, pendrive/pendrive, razor/razor, screw/screw, screwdriver/screwdriver, spoon/spoon, toothbrush/toothbrush, wrench/wrench
-ball/ball, bottle/bottle, box/box, calculator/calculator, camera/camera, can/can, case/case, container/container, cup/cup, hd/hd, lamp/lamp, orange/orange, pear/pear, phone/phone, wallet/wallet
+# allendriver/allendriver, battery/battery, brush/brush, fork/fork, key/key, knife/knife, lighter/lighter, mechanical_pencil/mechanical_pencil, pen/pen, pendrive/pendrive, razor/razor, screw/screw, screwdriver/screwdriver, spoon/spoon, toothbrush/toothbrush, wrench/wrench
+# ball/ball, bottle/bottle, box/box, calculator/calculator, camera/camera, can/can, case/case, container/container, cup/cup, hd/hd, lamp/lamp, orange/orange, pear/pear, phone/phone, wallet/wallet
 
 
 
