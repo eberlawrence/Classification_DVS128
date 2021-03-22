@@ -162,7 +162,8 @@ for i in range(len(cv_val)):
 
 plt.title('Accuracies vs Epochs')
 for i in range(n_folds):
-	plt.plot(model_history[i].history['accuracy'], label='Training Fold ' + str(i + 1))
+	plt.plot(model_history[i].history['accuracy'], label='accuracy Training Fold ' + str(i + 1))
+	plt.plot(model_history[i].history['val_accuracy'], label='val_accuracy Training Fold ' + str(i + 1), linestyle = "dashdot")
 
 
 plt.legend()
@@ -171,9 +172,10 @@ plt.show()
 
 plt.title('Train Accuracy vs Val Accuracy')
 for i in range(n_folds):
-	plt.plot(model_history[i].history['accuracy'], label='Train Accuracy Fold ' + str(i + 1))
-	plt.plot(model_history[i].history['val_accuracy'], label='Val Accuracy Fold ' + str(i + 1), linestyle = "dashdot")
-
+	# plt.plot(model_history[i].history['accuracy'], label='Train Accuracy Fold ' + str(i + 1))
+	plt.plot(model_history[i].history['loss'], label='loss Fold ' + str(i + 1), linestyle = "dashdot")
+	# plt.plot(model_history[i].history['loss'], label='Training Fold ' + str(i + 1))
+	plt.plot(model_history[i].history['val_loss'], label='val_loss Fold ' + str(i + 1))
 
 plt.legend()
 plt.show()

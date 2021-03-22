@@ -4,18 +4,22 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import random
+from time import time
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import KFold
 
 # DEEP LEARNING IMPORTS
 from keras.models import Sequential
-from keras.layers import Dense, Conv2D, Activation, Dropout, Flatten, MaxPooling2D
+from keras.layers import Dense, Conv2D, Activation, Dropout, Flatten, MaxPooling2D, AveragePooling2D
 from keras.optimizers import Adam
 from keras.utils import to_categorical
 from keras.preprocessing.image import ImageDataGenerator
+from keras.callbacks import TensorBoard
+from keras.losses import categorical_crossentropy
 
 sys.path.append('/home/user/GitHub/openDVS/Online')
 import utilsDVS128
@@ -62,35 +66,19 @@ def prep_submissions(preds_array):
 	return predicted_labels
 
 
-class finalNetwork:
-	@staticmethod
-	def build(width, height, depth, classes):
-		# initialize the model
-		model = Sequential()
-		inputShape = (height, width, depth)
-		# first set of CONV => RELU => POOL layers
-		model.add(Conv2D(16, (3, 3), input_shape=inputShape))
-		model.add(Activation("relu"))
-		model.add(MaxPooling2D(pool_size=(2, 2)))
-		# second set of CONV => RELU => POOL layers
-		model.add(Conv2D(32, (3, 3)))
-		model.add(Activation("relu"))
-		model.add(MaxPooling2D(pool_size=(2, 2)))
-		# third set of CONV => RELU => POOL layers
-		model.add(Conv2D(64, (3, 3)))
-		model.add(Activation("relu"))
-		model.add(MaxPooling2D(pool_size=(2, 2)))
-		# first (and only) set of FC => RELU layers
-		model.add(Flatten())
-		model.add(Dense(128))
-		model.add(Activation("relu"))
-		model.add(Dense(128))
-		model.add(Activation("relu"))
-		# softmax classifier
-		model.add(Dense(classes))
-		model.add(Activation("softmax"))
-		# return the constructed network architecture
-		return model
+
+def lenet_model(width, height, depth, classes):
+	inputShape = (height, width, depth)
+	model = Sequential()
+	model.add(Conv2D(filters=6, kernel_size=(3, 3), activation='relu', input_shape=inputShape))
+	model.add(AveragePooling2D())
+	model.add(Conv2D(filters=16, kernel_size=(3, 3), activation='relu'))
+	model.add(AveragePooling2D())
+	model.add(Flatten())
+	model.add(Dense(units=120, activation='relu'))
+	model.add(Dense(units=84, activation='relu'))
+	model.add(Dense(units=classes, activation = 'softmax'))
+	return model
 
 
 #######################################################################################################################################
@@ -134,10 +122,6 @@ img, lab = utilsDVS128.createDataset(path='/home/user/GitHub/aedatFiles/new_data
 										tI=40000)
 
 
-for i in range(len(img)):
-    img[i][img[i] == 0] = 255
-    img[i][img[i] == 127] = 0
-
 
 imgROI = []
 rem = []
@@ -168,6 +152,10 @@ for i in range(30):
 
 images = np.array(imgROI)
 
+for i in range(len(images)):
+	images[i][images[i] == 0] = 255
+	images[i][images[i] < 200] = 0
+
 
 size = 300
 final_images = []
@@ -184,17 +172,13 @@ final_images = np.array(final_images)
 images = []
 
 
-for i in range(len(total_images)):
-	total_images[i][total_images[i] < 200] = 0
-
-
-a = 0
-for i, v in enumerate(total_images):
-	a += 50
-	print(lab[i + a])
-	plt.imshow(total_images[i + a], cmap="gray")
-	plt.show()
-
+# a = 0
+# for i, v in enumerate(train_img):
+# 	a += 50
+# 	print(train_labels[i + a])
+# 	plt.imshow(train_img[i + a], cmap="gray")
+# 	plt.show()
+#
 
 
 ##########################################################################################
@@ -214,63 +198,156 @@ extra_images = np.concatenate((extra_images_Tripod, extra_images_Power))
 extra_labels = np.concatenate((np.zeros(len(extra_images_Tripod)), np.ones(len(extra_images_Power))))
 
 extra_images_Tripod, extra_images_Power = [], []
+
+extra_images = extra_images.reshape(extra_images.shape[0], image_shape[0], image_shape[1], 1)
+extra_images = (extra_images / 255).astype('float32')
+
 final_images = []
 
 total_images = total_images.reshape(total_images.shape[0], image_shape[0], image_shape[1], 1)
 total_images = (total_images / 255).astype('float32')
-extra_images = extra_images.reshape(extra_images.shape[0], image_shape[0], image_shape[1], 1)
-extra_images = (extra_images / 255).astype('float32')
 
 
-(train_img, test_img, train_labels, test_labels) = train_test_split(total_images, total_labels, test_size=0.2, shuffle=True)
 
-total_images, total_labels = [], []
+shuffler = np.random.permutation(len(total_images))
+total_images = total_images[shuffler]
+total_labels = total_labels[shuffler]
 
-aux_test_labels = train_labels
-aux_train_labels = test_labels
-
-train_labels = to_categorical(train_labels, num_classes=n_classes)
-test_labels = to_categorical(test_labels, num_classes=n_classes)
-
-# construct the image generator for data augmentation
-aug = ImageDataGenerator(rotation_range=30, width_shift_range=0.1, height_shift_range=0.1, shear_range=0.2, zoom_range=0.2, horizontal_flip=True, fill_mode="nearest")
-
+total_labels_encoded = to_categorical(total_labels, num_classes=n_classes)
 
 ##########################################################################################
 ##########################################################################################
 
 
 # initialize the number of epochs to train for, initia learning rate, and batch size
+
+n_folds = 4
 EPOCHS = 20
-INIT_LR = 1e-3
-BATCH_SIZE = 150
-
-# initialize the model
-print("[INFO] compiling model...")
-model = finalNetwork.build(width=image_shape[0], height=image_shape[1], depth=1, classes=n_classes)
-opt = Adam(lr=INIT_LR, decay=INIT_LR / EPOCHS)
-model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
-# train the network
-print("[INFO] training network...")
-H = model.fit(x=aug.flow(train_img, train_labels, batch_size=BATCH_SIZE), validation_data=(test_img, test_labels), steps_per_epoch=len(train_img) // BATCH_SIZE,	epochs=EPOCHS, verbose=1)
+BATCH_SIZE = 100
+model_history = []
+cv_train, cv_val = [], []
+model = []
+acc_per_fold, loss_per_fold = [], []
 
 
-plt.style.use("ggplot")
-plt.figure()
-plt.plot(np.arange(0, EPOCHS), H.history["loss"], label="train_loss")
-plt.plot(np.arange(0, EPOCHS), H.history["val_loss"], label="val_loss")
-plt.plot(np.arange(0, EPOCHS), H.history["accuracy"], label="train_acc")
-plt.plot(np.arange(0, EPOCHS), H.history["val_accuracy"], label="val_acc")
-plt.title("Training Loss and Accuracy on Santa/Not Santa")
-plt.xlabel("Epoch #")
-plt.ylabel("Loss/Accuracy")
-plt.legend(loc="lower left")
+kfold = StratifiedKFold(n_splits=n_folds)
+
+# K-fold Cross Validation model evaluation
+fold_no = 1
+for train, test in kfold.split(total_images, total_labels):
+	# model architecture
+	model = lenet_model(width=image_shape[0], height=image_shape[1], depth=1, classes=n_classes)
+	# Compile the model
+	model.compile(loss=categorical_crossentropy, optimizer=Adam(), metrics=['accuracy'])
+	# Generate a print
+	print('------------------------------------------------------------------------')
+	print(f'Training for fold {fold_no} ...')
+	# Fit data to model
+	model_history.append(model.fit(total_images[train], total_labels_encoded[train], batch_size=BATCH_SIZE, epochs=EPOCHS, verbose=1))
+	# Generate generalization metrics
+	scores = model.evaluate(total_images[test], total_labels_encoded[test], verbose=0)
+	print(f'Score for fold {fold_no}: {model.metrics_names[0]} of {scores[0]}; {model.metrics_names[1]} of {scores[1]*100}%')
+	acc_per_fold.append(scores[1] * 100)
+	loss_per_fold.append(scores[0])
+	# Increase fold number
+	fold_no = fold_no + 1
+
+
+
+
+plt.title('Accuracies vs Epochs')
+for i in range(n_folds):
+	plt.plot(model_history[i].history['accuracy'], label='accuracy Training Fold ' + str(i + 1))
+	plt.plot(model_history[i].history['val_accuracy'], label='val_accuracy Training Fold ' + str(i + 1), linestyle = "dashdot")
+
+
+plt.legend()
 plt.show()
+
+
+plt.title('Train Accuracy vs Val Accuracy')
+for i in range(n_folds):
+	# plt.plot(model_history[i].history['accuracy'], label='Train Accuracy Fold ' + str(i + 1))
+	plt.plot(model_history[i].history['loss'], label='loss Fold ' + str(i + 1), linestyle = "dashdot")
+	# plt.plot(model_history[i].history['loss'], label='Training Fold ' + str(i + 1))
+	plt.plot(model_history[i].history['val_loss'], label='val_loss Fold ' + str(i + 1))
+
+plt.legend()
+plt.show()
+
+
+
+##########################################################################################
+##########################################################################################
+
+
+EPOCHS = 30
+BATCH_SIZE = 150
+model_history = []
+model = []
+
+model = lenet_model(width=image_shape[0], height=image_shape[1], depth=1, classes=n_classes)
+model.compile(loss=categorical_crossentropy, optimizer=Adam(), metrics=['accuracy'])
+model_history.append(model.fit(total_images, total_labels_encoded, batch_size=BATCH_SIZE, epochs=EPOCHS, verbose=1))
+
+
+plt.title('Accuracies vs Epochs')
+plt.plot(model_history[0].history['accuracy'], label='Accuracy Training')
+plt.legend()
+plt.show()
+plt.title('Loss vs Epochs')
+plt.plot(model_history[0].history['loss'], label='Loss Training', linestyle = "dashdot")
+plt.legend()
+plt.show()
+
+
+
+
 
 
 aux = to_categorical(extra_labels, num_classes=2)
 model.evaluate(extra_images, aux)
 
+
+
+saveModelAndWeights(model, name="lenet_model")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+extra_images_aux = extra_images.reshape(extra_images.shape[0], image_shape[0], image_shape[1])
+while True:
+	index = np.random.randint(len(extra_images_aux))
+	print(extra_labels[index])
+	plt.imshow(extra_images_aux[index], cmap="gray")
+	plt.show()
+
+
+# while True:
+# 	index = np.random.randint(len(total_images))
+# 	print(total_labels[index])
+# 	plt.imshow(total_images[index].reshape(128, 128), cmap="gray")
+# 	plt.show()
+#
 
 
 test_preds = model.predict(extra_images)
@@ -279,7 +356,7 @@ print(classification_report(test_labels, test_preds_labels))
 draw_confusion_matrix(test_labels, test_preds_labels)
 
 
-saveModelAndWeights(model, name="model")
+saveModelAndWeights(model, name="lenet_model")
 
 
 # allendriver/allendriver, battery/battery, brush/brush, fork/fork, key/key, knife/knife, lighter/lighter, mechanical_pencil/mechanical_pencil, pen/pen, pendrive/pendrive, razor/razor, screw/screw, screwdriver/screwdriver, spoon/spoon, toothbrush/toothbrush, wrench/wrench
@@ -357,3 +434,89 @@ for i, v in enumerate(img):
 # 	model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 # 	return model
 #
+
+kfold = StratifiedKFold(n_splits=n_folds)
+for train, test in kfold.split(total_images, total_labels):
+	print(test)
+	cv_train.append(total_images[train])
+	cv_val.append(total_labels_encoded[train])
+
+
+cv_train = np.array(cv_train)
+cv_val = np.array(cv_val)
+
+for i in range(len(cv_val)):
+	model = lenet_model(width=image_shape[0], height=image_shape[1], depth=1, classes=n_classes)
+	model.compile(loss=categorical_crossentropy, optimizer=Adam(), metrics=['accuracy'])
+	model_history.append(model.fit(cv_train[i], cv_val[i], batch_size=BATCH_SIZE, epochs=EPOCHS, verbose=1))
+	print("Val Score: ", model.evaluate(test_img, cv_val[i], num_classes=n_classes)))
+
+
+
+
+
+
+
+
+
+
+Angola
+Argentina
+Austria
+Bolivia
+Botswana
+Brazil
+Burundi
+Cape Verde
+Chile
+Colombia
+Democratic Republic of the Congo
+Ecuador
+Eswatini
+French Guiana
+Guyana
+Lesotho
+Malawi
+Mauritius
+Mozambique
+Namibia
+Paraguay
+Panama
+Peru
+Rwanda
+Seychelles
+South Africa
+Suriname
+Tanzania
+United Arab Emirates
+Uruguay
+Venezuela
+Zambia
+Zimbabwe
+
+*Africa*
+
+Morocco
+Algeria
+Tunisia
+Libya
+Egypt
+
+
+
+*America*
+
+Mexico
+Puerto Rico
+Honduras
+Costa Rica
+Belize
+El Salvador
+Honduras
+Nicaragua
+Cuba
+Dominican Republic
+United States
+Canada
+Jamaica
+Haiti
