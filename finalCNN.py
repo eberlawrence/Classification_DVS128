@@ -122,6 +122,16 @@ img, lab = utilsDVS128.createDataset(path='/home/user/GitHub/aedatFiles/new_data
 										tI=40000)
 
 
+# a = 7000
+# for i, v in enumerate(img):
+# 	a += 30
+# 	print(i + a)
+# 	plt.imshow(img[i+a], cmap='gray')
+# 	plt.show()
+#
+
+
+
 
 imgROI = []
 rem = []
@@ -172,13 +182,13 @@ final_images = np.array(final_images)
 images = []
 
 
-# a = 0
-# for i, v in enumerate(train_img):
-# 	a += 50
-# 	print(train_labels[i + a])
-# 	plt.imshow(train_img[i + a], cmap="gray")
-# 	plt.show()
-#
+a = 0
+for i, v in enumerate(train_img):
+	a += 50
+	print(train_labels[i + a])
+	plt.imshow(train_img[i + a], cmap="gray")
+	plt.show()
+
 
 
 ##########################################################################################
@@ -214,6 +224,7 @@ total_images = total_images[shuffler]
 total_labels = total_labels[shuffler]
 
 total_labels_encoded = to_categorical(total_labels, num_classes=n_classes)
+extra_labels_encoded = to_categorical(extra_labels, num_classes=n_classes)
 
 ##########################################################################################
 ##########################################################################################
@@ -221,9 +232,9 @@ total_labels_encoded = to_categorical(total_labels, num_classes=n_classes)
 
 # initialize the number of epochs to train for, initia learning rate, and batch size
 
-n_folds = 4
-EPOCHS = 20
-BATCH_SIZE = 100
+n_folds = 5
+EPOCHS = 15
+BATCH_SIZE = 96
 model_history = []
 cv_train, cv_val = [], []
 model = []
@@ -243,7 +254,7 @@ for train, test in kfold.split(total_images, total_labels):
 	print('------------------------------------------------------------------------')
 	print(f'Training for fold {fold_no} ...')
 	# Fit data to model
-	model_history.append(model.fit(total_images[train], total_labels_encoded[train], batch_size=BATCH_SIZE, epochs=EPOCHS, verbose=1))
+	model_history.append(model.fit(total_images[train], total_labels_encoded[train], validation_data=(total_images[test], total_labels_encoded[test]), batch_size=BATCH_SIZE, epochs=EPOCHS, verbose=1))
 	# Generate generalization metrics
 	scores = model.evaluate(total_images[test], total_labels_encoded[test], verbose=0)
 	print(f'Score for fold {fold_no}: {model.metrics_names[0]} of {scores[0]}; {model.metrics_names[1]} of {scores[1]*100}%')
@@ -281,32 +292,32 @@ plt.show()
 ##########################################################################################
 
 
-EPOCHS = 30
-BATCH_SIZE = 150
+EPOCHS = 15
+BATCH_SIZE = 96
 model_history = []
 model = []
 
 model = lenet_model(width=image_shape[0], height=image_shape[1], depth=1, classes=n_classes)
 model.compile(loss=categorical_crossentropy, optimizer=Adam(), metrics=['accuracy'])
-model_history.append(model.fit(total_images, total_labels_encoded, batch_size=BATCH_SIZE, epochs=EPOCHS, verbose=1))
+model_history.append(model.fit(total_images, total_labels_encoded, validation_data=(extra_images, extra_labels_encoded), batch_size=BATCH_SIZE, epochs=EPOCHS, verbose=1))
 
 
 plt.title('Accuracies vs Epochs')
 plt.plot(model_history[0].history['accuracy'], label='Accuracy Training')
+plt.plot(model_history[0].history['val_accuracy'], label='validation_accuracy', linestyle = "dashed")
 plt.legend()
 plt.show()
+
+
 plt.title('Loss vs Epochs')
-plt.plot(model_history[0].history['loss'], label='Loss Training', linestyle = "dashdot")
+plt.plot(model_history[0].history['loss'], label='Loss Training')
+plt.plot(model_history[0].history['val_loss'], label='validation_loss', linestyle = "dashed")
 plt.legend()
 plt.show()
 
 
 
-
-
-
-aux = to_categorical(extra_labels, num_classes=2)
-model.evaluate(extra_images, aux)
+model.evaluate(extra_images, extra_labels_encoded)
 
 
 
@@ -405,7 +416,7 @@ saveModelAndWeights(model, name="lenet_model")
 
 a = 0
 for i, v in enumerate(img):
-	a += 50
+	a += 20
 	print(i + a)
 	plt.imshow(img[i+a], cmap='gray')
 	plt.show()
